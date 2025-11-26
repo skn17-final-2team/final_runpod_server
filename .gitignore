@@ -1,0 +1,20 @@
+# Python 컴파일 파일 무시
+*.pyc
+**/*.pyc
+*.pyo
+*.pyd
+__pycache__/
+**/__pycache__/
+
+# 키 파일 무시
+**/*.env
+*.env
+**/*.pem
+*.pem
+
+# VS Code 설정 무시
+.vscode/
+
+**/*.sqlite3
+
+.DS_Store

@@ -1,0 +1,26 @@
+# === torch ===
+torch==2.9.1+cu128 torchvision==0.24.1+cu128 torchaudio==2.9.1+cu128 --index-url https://download.pytorch.org/whl/cu128
+
+# === Hugging Face ===
+huggingface-hub==0.36.0
+transformers==4.57.3
+peft==0.18.0
+accelerate==1.12.0
+hf-transfer==0.1.9
+protobuf==5.28.2
+
+# === Whisper + pyannote ===
+openai-whisper==20250625
+pyannote-audio==4.0.2
+
+# === Web Framework ===
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.6
+pydantic>=2.9.2
+
+# === S3 URL 방식 ===
+boto3>=1.41.4
+httpx>=0.28.1
+
+# === 기타 ===
+python-dotenv==1.0.1
