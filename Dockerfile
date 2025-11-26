@@ -14,8 +14,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsndfile1 \
     git \
-    && rm -rf /var/lib/apt/lists/*
-    
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
+
 # 나머지 코드 전체 복사
 COPY . .
 
