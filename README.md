@@ -3,7 +3,7 @@
 # 1. 런팟 올리고 git clone
   ```bash
 git clone https://github.com/skn17-final-2team/final_runpod_server.git
-cd final_runpod_server
+
   ```
 
 # 2. 환경 세팅
@@ -11,11 +11,15 @@ cd final_runpod_server
 python3.11 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip setuptools wheel
-# Hugging Face 토큰 설정 본인 토큰으로 변경
-echo "HF_TOKEN=<your_huggingface_token>" >> .env
+cd final_runpod_server
 pip install --no-cache-dir -r requirements.txt
   ```
-# 3. uvicorn run
+
+# 3. Hugging Face 토큰 설정 본인 토큰으로 변경
+  ```bash
+echo "HF_TOKEN=<your_huggingface_token>" >> .env
+  ```
+# 4. uvicorn run
   ```bash
 uvicorn main:app --host 0.0.0.0 --port 8000
   ```
