@@ -84,4 +84,4 @@ if __name__ == "__main__":
             {"role": "user", "content": input("질문: ")},
         ]
         pipe(messages, max_new_tokens=1024)
-        print(pipe)
+        print(pipe[0]['generated_text'])
