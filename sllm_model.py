@@ -83,5 +83,5 @@ if __name__ == "__main__":
             {"role": "system", "content": "모든 질문에 대해 반드시 한국어로 대답하시오."},
             {"role": "user", "content": input("질문: ")},
         ]
-        pipe(messages, max_new_tokens=1024)
-        print(pipe[0]['generated_text'])
+        response = pipe(messages, max_new_tokens=1024)
+        print(response[0]['generated_text'])
