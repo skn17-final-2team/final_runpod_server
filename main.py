@@ -1,7 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from whisper_pannote import run_stt_diarization
+from sllm_model import run_inference_model
 
 app = FastAPI(title="Runpod STT + Pyannote Server")
 
@@ -16,14 +17,35 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class Query(BaseModel):
-    text: str
+class AudioRequest(BaseModel):
+    audio_url: str
+
+class InferenceRequest(BaseModel):
+    transcript: str
 
 # 포트연결 정상 적동 되었는지 확인용
 @app.get("/health")
 def health_check():
-    return {"status": "ok"}
+    return {"status": "ok", "timestamp": __import__('time').time()}
 
 @app.post("/stt")
-async def stt(req: Query):
-    return run_stt_diarization(req.text)
+async def stt(req: AudioRequest):
+    if not req.audio_url:
+        raise HTTPException(status_code=422, detail="audio_url required")
+    try:
+        result = run_stt_diarization(req.audio_url)
+        if not result.get("success", False):
+            raise HTTPException(status_code=500, detail=result)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})
+
+@app.post("/inference")
+async def inference(req: InferenceRequest):
+    if not req.transcript:
+        raise HTTPException(status_code=422, detail="transcript required")
+    try:
+        result = run_inference_model(req.transcript)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})

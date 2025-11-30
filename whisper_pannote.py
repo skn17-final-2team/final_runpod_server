@@ -1,4 +1,4 @@
-import os, requests
+import os, requests, time
 import tempfile
 import torch
 import whisper
@@ -12,23 +12,30 @@ token=os.getenv('HF_TOKEN')
 whisper_model = whisper.load_model("medium")
 pipeline = Pipeline.from_pretrained(
     "pyannote/speaker-diarization-community-1",
-    token=token).to(torch.device("cuda"))
+    token=token)
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+pipeline.to(device)
+
+def clear_cuda_cache():
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
 def run_stt_diarization(audio_url):
-    resp = requests.get(audio_url)
-    print("status:", resp.status_code)
+    start_time = time.time()
 
-    if resp.status_code != 200:
-        print("==== ERROR BODY ====")
-        print(resp.text)
-        return {
-            "success": False,
-            "message": resp.text
-        }
+    try:
+        resp = requests.get(audio_url)
+        if resp.status_code != 200:
+            print("==== ERROR BODY ====")
+            print(resp.text)
+            return {"success": False, "message": f"Download failed ({resp.status_code})"}
+        audio_bytes = resp.content
+    except Exception as e:
+        return {"success": False, "error": {"type": "DownloadError", "message": str(e)}}
 
-    audio_bytes = resp.content
-
-    tmp_path = None # Initialize tmp_path
+    tmp_path = None
+    
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
             tmp.write(audio_bytes)
@@ -84,19 +91,24 @@ def run_stt_diarization(audio_url):
         formatted_text = "\n".join(f"{seg['speaker']}: {seg['text']}" for seg in merged_segments)
 
         return {
-                "success": True,
-                "message": {
-                    "full_text": formatted_text,
-                    "segments": merged_segments,
-                    "speakers": list({s['speaker'] for s in merged_segments}),
-                    "raw_transcript": whisper_result["text"]
-                }
+            "success": True,
+            "data": {
+                "full_text": formatted_text,
+                "segments": merged_segments,
+                "speakers": list({s['speaker'] for s in merged_segments}),
+                "raw_transcript": whisper_result["text"]
             }
+        }
+
     except Exception as e:
         print(f"An error occurred during audio processing: {e}")
         return {
             "success": False,
-            "message": f"Error during audio processing: {e}"
+            "error": {
+                "type": "AudioProcessingError",
+                "message": "Error during audio processing",
+                "detail": str(e)
+            }
         }
     finally:
         # Ensure temporary file is deleted
