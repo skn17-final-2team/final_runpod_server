@@ -1,8 +1,11 @@
 # === torch ===
---extra-index-url https://download.pytorch.org/whl/cu128
-torch==2.9.1+cu128
-torchvision==0.24.1+cu128
-torchaudio==2.9.1+cu128
+# --extra-index-url https://download.pytorch.org/whl/cu128
+# torch==2.9.1+cu128
+# torchvision==0.24.1+cu128
+# torchaudio==2.9.1+cu128
+torch==2.9.1
+torchvision==0.24.1
+torchaudio==2.9.1
 
 # === Hugging Face ===
 huggingface_hub>=0.36.0,<1.0
@@ -14,7 +17,7 @@ protobuf==5.28.2
 
 # === Whisper + pyannote ===
 openai-whisper==20250625
-pyannote-audio==4.0.1
+pyannote-audio==4.0.2
 
 # === Web Framework ===
 fastapi>=0.115.0
