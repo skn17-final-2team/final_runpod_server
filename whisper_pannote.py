@@ -7,7 +7,9 @@ from dotenv import load_dotenv
 from pyannote.audio.core import task as task_module
 
 torch.serialization.add_safe_globals([
-    task_module.Resolution
+    task_module.Specifications,
+    task_module.Resolution,
+    task_module.Problem,
 ])
 
 # 토큰
