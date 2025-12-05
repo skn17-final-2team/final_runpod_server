@@ -11,36 +11,27 @@ summery_prompt_template = """
 아래 JSON 구조를 정확히 따르되, 실제 값은 전문 기반으로 채워라.
 
 {{
-  "id": "{record_id}",
-    "summary": {{
-      "agenda_1": {{
-        "who": "...",
-        "what": "...",
-        "when": "...",
-        "where": "...",
-        "why": "...",
-        "how": "...",
-        "how_much": "...",
-        "how_long": "..."
-      }},
-      "agenda_2": {{
-        "who": "...",
-        "what": "...",
-        "when": "...",
-        "where": "...",
-        "why": "...",
-        "how": "...",
-        "how_much": "...",
-        "how_long": "..."
-      }}
-    }}
-  }},
   "agendas": [
-    {{
-      "title": "안건 제목",
-      "description": "안건 설명 (없으면 null)"
-    }}
-  ]
+    "agenda_1": {{
+    "who": "...",
+    "what": "...",
+    "when": "...",
+    "where": "...",
+    "why": "...",
+    "how": "...",
+    "how_much": "...",
+    "how_long": "..."
+    }},
+    "agenda_2": {{
+      "who": "...",
+      "what": "...",
+      "when": "...",
+      "where": "...",
+      "why": "...",
+      "how": "...",
+      "how_much": "...",
+      "how_long": "..."
+    }}]
 }}
 
 [규칙]
