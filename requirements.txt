@@ -11,6 +11,8 @@ peft==0.18.0
 accelerate==1.12.0
 hf-transfer==0.1.9
 protobuf==5.28.2
+sentence-transformers
+faiss-gpu
 
 # === Whisper + pyannote ===
 openai-whisper==20250625
@@ -24,6 +26,14 @@ pydantic>=2.9.2
 # === S3 URL 방식 ===
 boto3>=1.41.4
 httpx>=0.28.1
+
+# === langchain ===
+langchain==0.3.27
+langchain-core==0.3.76 
+langchain-community==0.3.30 
+langchain-text-splitters==0.3.11 
+langchain-huggingface==0.3.1 
+langchain-ollama==0.3.10
 
 # === 기타 ===
 python-dotenv==1.0.1
