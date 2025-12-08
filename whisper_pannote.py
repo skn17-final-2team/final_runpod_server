@@ -2,9 +2,11 @@ import os, requests, time
 import tempfile
 import torch
 import whisper
+import concurrent.futures
+
 from pyannote.audio import Pipeline
-from dotenv import load_dotenv
 from pyannote.audio.core import task as task_module
+from dotenv import load_dotenv
 
 torch.serialization.add_safe_globals([
     task_module.Specifications,
@@ -16,42 +18,66 @@ torch.serialization.add_safe_globals([
 load_dotenv()
 token=os.getenv('HF_TOKEN')
 
-whisper_model = whisper.load_model("medium")
-pipeline = Pipeline.from_pretrained(
-    "pyannote/speaker-diarization-community-1",
-    token=token)
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-pipeline.to(device)
+
+def run_pyannote(device):
+    pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization-community-1", token=token)
+    pipeline.to(torch.device(device))
+    return pipeline
+
+if torch.cuda.is_available():
+    whisper_model = whisper.load_model("medium", device="cuda:0")
+    num_gpus = torch.cuda.device_count()
+
+    if num_gpus < 2:
+        pipeline = run_pyannote("cuda:0")
+    else:
+        pipeline = run_pyannote("cuda:1")
+else:
+    whisper_model = whisper.load_model("medium")
+    pipeline = Pipeline.from_pretrained(
+        "pyannote/speaker-diarization-community-1",
+        token=token)
+    pipeline.to(device)
 
 def clear_cuda_cache():
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
-def run_stt_diarization(audio_url):
-    start_time = time.time()
+def run_stt_diarization(audio_url, DEBUG=False):
+    if not DEBUG:
+        try:
+            resp = requests.get(audio_url)
+            if resp.status_code != 200:
+                print("==== ERROR BODY ====")
+                print(resp.text)
+                return {"success": False, "message": f"Download failed ({resp.status_code})"}
+            audio_bytes = resp.content
+        except Exception as e:
+            return {"success": False, "error": {"type": "DownloadError", "message": str(e)}}
 
-    try:
-        resp = requests.get(audio_url)
-        if resp.status_code != 200:
-            print("==== ERROR BODY ====")
-            print(resp.text)
-            return {"success": False, "message": f"Download failed ({resp.status_code})"}
-        audio_bytes = resp.content
-    except Exception as e:
-        return {"success": False, "error": {"type": "DownloadError", "message": str(e)}}
-
+    else:
+        with open(audio_url, "rb") as f:
+            audio_bytes = f.read()
     tmp_path = None
     
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
             tmp.write(audio_bytes)
             tmp_path = tmp.name
-
+        start = time.perf_counter()
         # Use globally loaded models
-        whisper_result = whisper_model.transcribe(tmp_path, language="ko")
-        diarization_result = pipeline(tmp_path)
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            whisper_future = executor.submit(whisper_model.transcribe, tmp_path, language="ko")
+            diarization_future = executor.submit(pipeline, tmp_path)
+
+            whisper_result = whisper_future.result()
+            diarization_result = diarization_future.result()
+
         annotation = diarization_result.speaker_diarization
+
+        end = time.perf_counter()
+        print(f"처리 시간: {end - start:.2f}초")
 
         final_segments = []
 
@@ -95,7 +121,7 @@ def run_stt_diarization(audio_url):
                 merged_segments.append(seg)
 
         # formatted text 결과
-        formatted_text = "\n".join(f"{seg['speaker']}: {seg['text']}" for seg in merged_segments)
+        formatted_text = [f"{seg['speaker']}: {seg['text']}" for seg in merged_segments]
 
         return {
             "success": True,
@@ -122,3 +148,7 @@ def run_stt_diarization(audio_url):
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
             print(f"Temporary file {tmp_path} deleted.")
+
+if __name__ == "__main__":
+    result = run_stt_diarization('test.wav', DEBUG=True)
+    print(result)
