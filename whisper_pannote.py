@@ -121,7 +121,7 @@ def run_stt_diarization(audio_url, DEBUG=False):
                 merged_segments.append(seg)
 
         # formatted text 결과
-        formatted_text = [f"{seg['speaker']}: {seg['text']}" for seg in merged_segments]
+        formatted_text = [{seg['speaker']: seg['text']} for seg in merged_segments]
 
         return {
             "success": True,
