@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from whisper_pannote import run_stt_diarization
-from sllm_model import run_inference_model
+# from sllm_model import run_inference_model
 
 app = FastAPI(title="Runpod STT + Pyannote Server")
 
@@ -40,12 +40,12 @@ async def stt(req: AudioRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})
 
-@app.post("/inference")
-async def inference(req: InferenceRequest):
-    if not req.transcript:
-        raise HTTPException(status_code=422, detail="transcript required")
-    try:
-        result = run_inference_model(req.transcript)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})
+# @app.post("/inference")
+# async def inference(req: InferenceRequest):
+#     if not req.transcript:
+#         raise HTTPException(status_code=422, detail="transcript required")
+#     try:
+#         result = run_inference_model(req.transcript)
+#         return result
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})
