@@ -32,20 +32,21 @@ model = load_model_q("Qwen/Qwen2.5-1.5B-Instruct")
 db_path = './faiss_db_merged'
 vector_store, embedding_model = load_faiss_db(db_path)
 
-PROMPT_DIR = Path(__file__).parent / "prompts"
-SYSTEM_PROMPT = (PROMPT_DIR / "system.txt").read_text(encoding="utf-8").strip()
-PROMPTS = {
-    "summarizer": (PROMPT_DIR / "summarizer.txt").read_text(encoding="utf-8").strip(),
-    "task_extractor": (PROMPT_DIR / "extract_tasks.txt").read_text(encoding="utf-8").strip(),
-}
+# PROMPT_DIR = Path(__file__).parent / "prompts"
+# SYSTEM_PROMPT = (PROMPT_DIR / "system.txt").read_text(encoding="utf-8").strip()
+# PROMPTS = {
+#     "summarizer": (PROMPT_DIR / "summarizer.txt").read_text(encoding="utf-8").strip(),
+#     "task_extractor": (PROMPT_DIR / "extract_tasks.txt").read_text(encoding="utf-8").strip(),
+# }
 
-summarizer_prompt = PROMPTS["summarizer"]
-task_prompt = PROMPTS["task_extractor"]  
+# summarizer_prompt = PROMPTS["summarizer"]
+# task_prompt = PROMPTS["task_extractor"]  
 
 def build_agent(model, vector_store) :
 
     safe_summarizer = escape_curly(PROMPTS["summarizer"])
     safe_task_prompt = escape_curly(PROMPTS["task_extractor"])
+    retriever = vector_store.as_retriever(search_kwargs={"k": 20})  # 필요하면 k 조절
 
     prompt = PromptTemplate.from_template('''
         You are an AI meeting-analysis agent specialized in IT projects and software development.
@@ -193,25 +194,34 @@ def build_agent(model, vector_store) :
     )
 
     @tool
-    def retrieval(term_list) :
+    def retrieval(term_list: list) -> dict:
         """FAISS 벡터스토어에서 전문 중 모르는 단어를 검색해 단어 정의를 반환하는 툴."""
-        print('여기다 여기!!!', term_list)      
-        for term in term_list:
-            docs = self.retriever.invoke(term)
+        print('여기다 여기!!!', term_list)
+
+        if isinstance(term_list, str):
+            term_list_local = [term_list]
+        else:
+            term_list_local = list(term_list)
+
+        # 🔹 한 번에 배치 조회
+        all_docs_list = retriever.batch(term_list_local)
+        definitions = {}
+
+        for term, docs in zip(term_list_local, all_docs_list):
             if not docs:
-                # 못 찾은 용어는 패스 
                 print(f'@#$@#$@${term}에 대한 용어 못찾음@#$#@$@#')
-                continue        
-            # 가장 관련도 높은 문서 1~2개를 합쳐서 정의로 사용
+                continue
+
             defs = []
-            definitions = []
             for d in docs[:2]:
                 ans = d.metadata.get("answer") or d.page_content
-                defs.append(ans.strip())        
+                defs.append(ans.strip())
+
             definitions[term] = "\n\n".join(defs)
-            print('여기다 여기!!!', definitions)
-            retrieval_result = {"output": json.dumps({"definitions": definitions}, ensure_ascii=False)}     
-            # 3) JSON 문자열로 반환
+
+        print('여기다 여기!!!', definitions)
+        retrieval_result = {"output": json.dumps({"definitions": definitions}, ensure_ascii=False)}
+        
         return retrieval_result
 
     tools = [retrieval]
