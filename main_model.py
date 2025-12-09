@@ -9,6 +9,13 @@ from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_huggingface import HuggingFacePipeline, ChatHuggingFace
 
+from typing import Any, List, Optional
+from langchain_core.language_models.llms import LLM
+from langchain_core.callbacks import CallbackManagerForLLMRun
+from langchain_core.prompt_values import PromptValue
+from langchain_core.messages import BaseMessage
+
+
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
 
@@ -36,8 +43,72 @@ def load_faiss_db(db_path: str):
     return vector_store, embedding_model
 
 
+# ===== 형식지정 =====
+class HFTextGenLLM(LLM):
+    """HF text-generation pipeline을 감싸는, 비-스트리밍 LLM 래퍼."""
+
+    # 🔹 BaseModel(LLM)에 등록될 필드
+    pipe: Any
+
+    # 🔹 HF pipeline 같은 임의 타입을 필드로 허용하려면 꼭 필요
+    model_config = {
+        "arbitrary_types_allowed": True,
+    }
+
+    @property
+    def _llm_type(self) -> str:
+        return "hf_text_generation_pipeline"
+
+    def _normalize_prompt(self, prompt) -> str:
+        """LangChain 쪽에서 넘어오는 다양한 타입을 항상 str로 정규화."""
+        # 1) PromptValue (PromptTemplate | ChatPromptTemplate 결과)
+        if isinstance(prompt, PromptValue):
+            return prompt.to_string()
+
+        # 2) 메시지 리스트
+        if isinstance(prompt, list) and prompt:
+            if isinstance(prompt[0], BaseMessage):
+                return "\n".join(m.content for m in prompt)
+
+        # 3) 이미 문자열이면 그대로
+        if isinstance(prompt, str):
+            return prompt
+
+        # 4) 나머지는 그냥 문자열 캐스팅
+        return str(prompt)
+
+    def _call(
+        self,
+        prompt,
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs,
+    ) -> str:
+        """LangChain에서 호출하는 메인 엔트리. 내부적으로 HF pipeline 한 번 실행."""
+        text = self._normalize_prompt(prompt)
+
+        # HF text-generation pipeline 실행
+        outputs = self.pipe(text)
+
+        # transformers pipeline("text-generation") 기본 반환 형식: [{"generated_text": "..."}]
+        if not outputs:
+            return ""
+
+        first = outputs[0]
+        generated = first.get("generated_text") or first.get("text") or ""
+
+        # stop 토큰이 있으면 거기서 잘라주기
+        if stop:
+            for s in stop:
+                if s in generated:
+                    generated = generated.split(s)[0]
+                    break
+
+        return generated
+
+
 # ===== 모델 로드 =====
-def load_model_q(model_name, adapter_name: str | None = None):
+def load_model_q(model_name: str , adapter_name: str | None = ft_model_name):
     if platform.system() == "Windows":
         print("⚠ Windows에서는 4bit 불가 → FP16로 로드합니다.")
         tokenizer = AutoTokenizer.from_pretrained(base_model_name)
@@ -71,7 +142,7 @@ def load_model_q(model_name, adapter_name: str | None = None):
         top_p=0.9
     )
 
-    llm = HuggingFacePipeline(pipeline=text_gen_pipe)
+    llm = HFTextGenLLM(pipe = text_gen_pipe)
     return llm
 
 
