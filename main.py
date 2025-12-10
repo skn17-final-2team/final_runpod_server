@@ -22,6 +22,7 @@ class AudioRequest(BaseModel):
 
 class InferenceRequest(BaseModel):
     transcript: str
+    domain: list[str] = []
 
 # 포트연결 정상 적동 되었는지 확인용
 @app.get("/health")
@@ -45,7 +46,7 @@ async def inference(req: InferenceRequest):
     if not req.transcript:
         raise HTTPException(status_code=422, detail="transcript required")
     try:
-        result = build_agent(req.transcript)
+        result = process_transcript_with_chunks(req.transcript, req.domain)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})
