@@ -1,14 +1,12 @@
-from .sllm_model import build_agent, process_transcript_with_chunks
-from .main_model import load_model_q
-from .main_model import load_faiss_db
-from .main_model import escape_curly
+from sllm_model import build_agent, process_transcript_with_chunks
+from main_model import load_model_q
+from main_model import load_faiss_db
+from main_model import escape_curly
 from pathlib import Path
 import json
 
-BASE_DIR = Path(__file__).resolve().parent
-db_path = BASE_DIR / "faiss_db_merged"
+db_path = "./faiss_db_merged"
 vector_store, embedding_model = load_faiss_db(db_path)
-
 
 if __name__ == "__main__":
     # 도메인 입력 (django랑 연결해야함)

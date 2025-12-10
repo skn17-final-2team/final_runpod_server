@@ -9,14 +9,13 @@ from langchain.tools import tool
 from langchain.agents import create_react_agent, AgentExecutor, Tool
 from langchain.prompts import PromptTemplate
 
-from .main_model import load_model_q, load_faiss_db, escape_curly
+from main_model import load_model_q, load_faiss_db, escape_curly
 
 # ===== 기본설정 =====
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
 
-BASE_DIR = Path(__file__).resolve().parent
-db_path = BASE_DIR / "faiss_db_merged"
+db_path = "./faiss_db_merged"
 vector_store, embedding_model = load_faiss_db(db_path)
 
 PROMPT_DIR = Path(__file__).parent / "prompts"
