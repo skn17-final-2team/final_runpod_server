@@ -1,8 +1,9 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 from whisper_pannote import run_stt_diarization
-from sllm_model import build_agent
+from sllm_model import process_transcript_with_chunks
+
 
 app = FastAPI(title="Runpod STT + Pyannote Server")
 
@@ -22,7 +23,7 @@ class AudioRequest(BaseModel):
 
 class InferenceRequest(BaseModel):
     transcript: str
-    domain: list[str] = []
+    domain: list[str] = Field(default_factory=list)
 
 # 포트연결 정상 적동 되었는지 확인용
 @app.get("/health")
