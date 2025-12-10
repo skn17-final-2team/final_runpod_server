@@ -66,8 +66,18 @@ def chunk_transcript(transcript: str, max_tokens: int = 1500) -> List[str]:
 
 
 # ===== 청크 별 처리 및 전체 요약/태스크 추출 =====
-def process_transcript_with_chunks(agent, transcript: str, max_chunk_tokens: int = 1500) -> dict:
-    
+def process_transcript_with_chunks(transcript: str, domain) -> dict:
+
+    user_domain = domain
+    if not user_domain :
+        domain_filter = None
+    else:
+        domain_filter = user_domain
+        
+    # 에이전트 빌드
+    agent = build_agent(model=load_model_q(), vector_store=vector_store, domain=domain_filter)
+    max_chunk_tokens = 1500
+
     print(f"\n{'='*60}")
     print(f"전문 길이: {len(transcript)} 글자")
     print(f"{'='*60}\n")

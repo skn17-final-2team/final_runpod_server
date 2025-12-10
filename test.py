@@ -10,17 +10,14 @@ vector_store, embedding_model = load_faiss_db(db_path)
 
 if __name__ == "__main__":
     # 도메인 입력 (django랑 연결해야함)
-    user_domain = input("도메인 입력 (accounting, design, marketing_economy, it): ").strip()
-    if user_domain.upper() == "ALL" or user_domain == "" :
-        domain_filter = None
-    else:
-        domain_filter = user_domain
+    domain = input("도메인 입력 (accounting, design, marketing_economy, it): ").strip()
 
     # 모델 연결 (1.5b 파튜 기본값 설정됨)
     model = load_model_q()
 
     # 에이전트 빌드 
-    agent = build_agent(model=model, vector_store=vector_store, domain=domain_filter)
+    # agent = build_agent(model=model, vector_store=vector_store, domain=domain_filter)
+    
 
     # 테스트용 루프 (django 연결 시, 필요 x / 현재 exit 입력 전까지 계속 반복 중(1회로 변경 필요))
     while True:
@@ -37,7 +34,7 @@ if __name__ == "__main__":
             break
 
         # 청크 처리 및 전체 요약/태스크 추출
-        result = process_transcript_with_chunks(agent=agent, transcript=query, max_chunk_tokens=1500)
+        result = process_transcript_with_chunks(transcript=query, domain=domain)
 
         # 결과 출력
         print("\n" + "="*60)
