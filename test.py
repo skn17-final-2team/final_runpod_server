@@ -41,8 +41,8 @@ if __name__ == "__main__":
         print("최종 결과")
         print("="*60 + "\n")
 
-        if result["chunk_results"]:
-            print(f"✅ {len(result['chunk_results'])}개 청크 처리 완료\n")
+        # if result["chunk_results"]:
+        #     print(f"✅ {len(result['chunk_results'])}개 청크 처리 완료\n")
 
         print("📝 안건/요약:")
         print("-" * 60)

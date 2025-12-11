@@ -1,4 +1,3 @@
-summery_prompt_template = """
 [지시]
 [입력 전문]만을 근거로 "summary", "agendas" 필드를
 요청된 **JSON 형식**으로만 출력하라.
@@ -13,42 +12,33 @@ summery_prompt_template = """
 {{
   "agendas": [
     "agenda_1": {{
-    "who": "...",
-    "what": "...",
-    "when": "...",
-    "where": "...",
-    "why": "...",
-    "how": "...",
-    "how_much": "...",
-    "how_long": "..."
+      "agenda": "...",
+      "agenda_description": "...", 
+      "summary": "...",
     }},
     "agenda_2": {{
-      "who": "...",
-      "what": "...",
-      "when": "...",
-      "where": "...",
-      "why": "...",
-      "how": "...",
-      "how_much": "...",
-      "how_long": "..."
-    }}]
+      "agenda": "...",
+      "agenda_description": "...", 
+      "summary": "...",
+    }},]
 }}
 
 [규칙]
 1. 반드시 유효한 JSON 객체 하나만 출력한다.
-2. id에는 시스템에서 전달된 {record_id}를 그대로 사용한다.
-3. summary.agendas와 agendas는 형식 개수 상관 없이 추출할 수 있는대로 뽑는다.
-4. summary.agendas:
-   - summary.agenda_1, summary.agenda_2 … 의 모든 필드는 '전문에 나오는 단어만' 사용해야 한다.
-   - 각 agenda도 5W3H 8개 항목을 포함한다.
+2. agendas는 형식 개수 상관 없이 추출할 수 있는대로 뽑는다.
+3. agendas:
+   - agendas.agenda_1, agendas.agenda_2 … 의 모든 필드는 '전문에 나오는 단어만' 사용해야 한다.
+   - 각 agenda는 agenda 별 요약을 포함한다. 
    - 전문에 직접 언급되지 않은 표현을 절대 생성하지 말고, 해당 항목은 null 로 설정한다.
-5. agendas:
    - 안건 리스트를 title/description 형태로 제공한다.
    - 안건 리스트 없으면 [].
-   - description은 없으면 null.
-   - summary의 agenda_1, agenda_2… 와 순서를 동일하게 맞춘다.
-6. 근거 없는 정보 생성 금지.
-7. 출력은 JSON 한 덩어리로. 부가 텍스트 금지.
+   - agenda_description은 없으면 null.
+   - summary는 각 agenda에 대해 언급된 내용을 5W3H 형식에 적합한 내용을 추출해 작성한다. 
+4. summary
+   - 각 agenda에 대해 언급된 내용을 요약하여 줄글로 표현한다. 
+   - summary에는 5W3H의 내역이 전부 포함되어야하며, 없는 내역은 절대 만들지 말고 제외한다. 
+   - 5W3H : Who, What, When, Where, Why, How, How much, How many
+5. 근거 없는 정보 생성 금지.
+6. 출력은 JSON 한 덩어리로. 부가 텍스트 금지.
 
 위 규칙을 모두 지켜 JSON 결과만 출력하라.
-"""
