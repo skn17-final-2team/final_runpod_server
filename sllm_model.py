@@ -8,8 +8,9 @@ from typing import List, Dict, Any, Tuple
 from langchain.tools import tool
 from langchain.agents import create_react_agent, AgentExecutor, Tool
 from langchain.prompts import PromptTemplate
+from datetime import datetime
 
-from main_model import load_model_q, load_faiss_db, escape_curly
+from main_model import load_model_q, load_faiss_db, escape_curly, preprocess_transcript
 
 # ===== 기본설정 =====
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -73,47 +74,54 @@ def process_transcript_with_chunks(transcript: str, domain) -> dict:
         domain_filter = None
     else:
         domain_filter = user_domain
-        
+    
+    # 전문 문장ㄹ로 
+    transcript = preprocess_transcript(transcript)    
+
     # 에이전트 빌드
     agent = build_agent(model=load_model_q(), vector_store=vector_store, domain=domain_filter)
-    max_chunk_tokens = 1500
+    # max_chunk_tokens = 1500
 
     print(f"\n{'='*60}")
     print(f"전문 길이: {len(transcript)} 글자")
     print(f"{'='*60}\n")
 
-    # 전문 길 경우 - 청크 
-    if len(transcript) > max_chunk_tokens:
-        chunks = chunk_transcript(transcript, max_chunk_tokens)
-        print(f"전문을 {len(chunks)}개 청크로 분할했습니다.\n")
+    # # 전문 길 경우 - 청크 
+    # if len(transcript) > max_chunk_tokens:
+    #     chunks = chunk_transcript(transcript, max_chunk_tokens)
+    #     print(f"전문을 {len(chunks)}개 청크로 분할했습니다.\n")
 
-        chunk_results = []
-        for i, chunk in enumerate(chunks, 1):
-            print(f"\n[청크 {i}/{len(chunks)}] 처리 중... (길이: {len(chunk)} 글자)")
-            try:
-                # 각 청크 agent 처리 (용어 검색)
-                result = agent.invoke({"input": f"다음은 회의록의 일부입니다. 이해하기 어려운 전문 용어가 있으면 검색해주세요:\n\n{chunk}"})
-                chunk_results.append({"chunk_index": i, "chunk_length": len(chunk), "result": result.get("output", "")})
-                print(f"[청크 {i}] 처리 완료")
-            except Exception as e:
-                print(f"[청크 {i}] 처리 실패: {e}")
-                chunk_results.append({
-                    "chunk_index": i,
-                    "chunk_length": len(chunk),
-                    "error": str(e)
-                })
-    else:
-      # 전문 길이 적절 시 - 풀로 진행
-      print("전문 길이가 적절합니다. 청크 분할 없이 진행합니다.\n")
-      chunk_results = []
+    #     chunk_results = []
+    #     for i, chunk in enumerate(chunks, 1):
+    #         print(f"\n[청크 {i}/{len(chunks)}] 처리 중... (길이: {len(chunk)} 글자)")
+    #         try:
+    #             # 각 청크 agent 처리 (용어 검색)
+    #             result = agent.invoke({"input": f"다음은 회의록의 일부입니다. 이해하기 어려운 전문 용어가 있으면 검색해주세요:\n\n{chunk}"})
+    #             chunk_results.append({"chunk_index": i, "chunk_length": len(chunk), "result": result.get("output", "")})
+    #             print(f"[청크 {i}] 처리 완료")
+    #         except Exception as e:
+    #             print(f"[청크 {i}] 처리 실패: {e}")
+    #             chunk_results.append({
+    #                 "chunk_index": i,
+    #                 "chunk_length": len(chunk),
+    #                 "error": str(e)
+    #             })
+    # else:
+    #   # 전문 길이 적절 시 - 풀로 진행
+    #   print("전문 길이가 적절합니다. 청크 분할 없이 진행합니다.\n")
+    #   chunk_results = []
 
-    # 전체 전문 기반으로 세부 안건, 안건별 요약 추출
-    print(f"\n{'='*60}")
-    print("전체 전문 기반 안건/요약 추출 중...")
-    print(f"{'='*60}\n")
+    # # 전체 전문 기반으로 세부 안건, 안건별 요약 추출
+    # print(f"\n{'='*60}")
+    # print("전체 전문 기반 안건/요약 추출 중...")
+    # print(f"{'='*60}\n")
 
     try:
-        summary_result = agent.invoke({"input": summarizer_prompt})
+        filled_summary_prompt = f"""다음 회의 전문을 분석하세요.
+                                    모르는 전문 용어가 있으면 retrieval 툴로 검색하세요.
+                                    {summarizer_prompt.format(transcript=transcript)}"""
+
+        summary_result = agent.invoke({"input": filled_summary_prompt})
         full_summary = summary_result.get("output", "")
         print("✅ 안건/요약 추출 완료\n")
     except Exception as e:
@@ -125,21 +133,22 @@ def process_transcript_with_chunks(transcript: str, domain) -> dict:
     print(f"{'='*60}\n")
 
     try:
-        task_result = agent.invoke({"input": task_prompt})
+        filled_task_prompt = f"""다음 회의 전문을 분석하세요.
+                                모르는 전문 용어가 있으면 retrieval 툴로 검색하세요.
+                                {task_prompt.format(transcript=transcript, current_date=datetime.now())}"""
+        task_result = agent.invoke({"input": filled_task_prompt})
         full_tasks = task_result.get("output", "")
         print("✅ 태스크 추출 완료\n")
     except Exception as e:
         print(f"❌ 태스크 추출 실패: {e}\n")
         full_tasks = {"error": str(e)}
 
-    return {"chunk_results": chunk_results, "full_summary": full_summary, "full_tasks": full_tasks}
+    # return {"chunk_results": chunk_results, "full_summary": full_summary, "full_tasks": full_tasks}
+    return {"full_summary": full_summary, "full_tasks": full_tasks}
 
 
 # ===== agent!!! =====
 def build_agent(model, vector_store, domain) :
-
-    safe_summarizer = escape_curly(PROMPTS["summarizer"])
-    safe_task_prompt = escape_curly(PROMPTS["task_extractor"])
 
     search_kwargs = {"k": 20}
     if domain:
@@ -149,63 +158,30 @@ def build_agent(model, vector_store, domain) :
 
     template = '''
         You are an AI meeting-analysis agent specialized in {domain} projects.
-        You will receive a meeting transcript about {domain} topics.
-        (e.g., Analysis of the latest market trends and competitor movements, Project Kick-off Meeting).
 
         You must answer as accurately as possible using the available tools.
         You have access to the following tools:
         {tools}
 
-        Your primary goals when handling a meeting-related request are:
-        1) Understand the meeting context:
-           - 목적(purpose), 참여자(participants), 결정사항(decisions), 미해결 이슈(open issues)를 파악한다.
-        2) When necessary, clarify or look up IT/technical/domain terms or concepts using tools.
-        3) From the meeting transcript, you must be able to:
-           - extract detailed agenda list
-           - summarize the meeting
-           - extract follow-up tasks
-        4) Ground your answers in the meeting transcript and retrieved domain documents; 
-           NEVER hallucinate requirements or decisions that are not supported by the content.
-
-          - Every field MUST be filled ONLY with words/phrases that appear in the original transcript.
-          - If a certain 5W3H item is not explicitly stated in the transcript, set that field to null.
-          - Do NOT invent or infer new facts that are not present in the transcript.
+        Main duties:
+        1. Accurately understand and carry out the given request.
+        2. When there are unknown technical or domain-specific terms in the full meeting transcript, use the `retrieval` tool to look them up.
+           - In a single call, you MUST search at most 5 terms.
+           - Expected input format: ["term1", "term2", "term3"]
+        3. Use only information that is explicitly stated in the meeting transcript; do NOT make up or infer information that is not mentioned.
+        4. The final answer you provide MUST be written in Korean.
 
         Use the following ReAct-style format:
 
-        transcript: the input transcript for the meeting
         Thought: you should always think about what to do next
         Action: the action to take, should be one of [{tool_names}]
         Action Input: the input to the action
         Observation: the result of the action
-        ... (this Thought/Action/Action Input/Observation can repeat up to 15 times)
+        ... (this Thought/Action/Action Input/Observation can repeat up to 3 times)
         Thought: I now know the final answer
         Final Answer: the final answer to the original input question in Korean
         (When you need JSON outputs, internally follow the Summary JSON Prompt
          or Tasks JSON Prompt described above.)
-
-        Hard constraints (format rules – MUST NOT be violated):
-        - Immediately after any line that starts with "Thought:", the very next line MUST be one of the following:
-          1) "Action: ..."
-          2) "Final Answer: ..."
-        - Do NOT write bullet points, long explanations, or any additional sentences between "Thought:" and
-          the next "Action:" or "Final Answer:". The line immediately following "Thought:" must be exactly
-          one of those two formats.
-        - When you use a tool, you MUST follow this format exactly:
-          Thought: ...
-          Action: tool_name
-          Action Input: "the input to pass to the tool"
-          Observation: the result returned by the tool
-        - When you no longer need to use any tools and you want to finish the answer, you MUST follow this format:
-          Thought: I can now provide the final answer.
-          Final Answer: (write the final answer in Korean)
-
-        Important rules:
-        - If the user request is general chit-chat, a simple greeting, or a very simple question, you MAY skip Action/Action Input/Observation and respond directly with Final Answer.
-        - If you need additional domain knowledge or definitions, choose the most appropriate tool from [{tool_names}] and use it.
-        - Use the meeting transcript and retrieved documents as the primary source of truth.
-        - When you summarize or extract issues/decisions/tasks, be faithful to the transcript.
-        - Final Answer MUST be written in Korean, unless the user clearly asks for another language.
 
         Begin!
 
@@ -248,7 +224,6 @@ def build_agent(model, vector_store, domain) :
                     term_list_local = [t.strip().strip('"\'') for t in term_list.split(',')]
                 else:
                     term_list_local = [term_list]
-
             elif isinstance(term_list, list):
                 term_list_local = term_list
 
@@ -356,7 +331,7 @@ def build_agent(model, vector_store, domain) :
     tools = [retrieval_tool]
 
     agent = create_react_agent(model, tools, prompt)
-    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=False, max_iterations=5, max_execution_time=400, handle_parsing_errors=True, early_stopping_method="generate")
+    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True, max_iterations=5, max_execution_time=1000, handle_parsing_errors=True)
 
     return agent_executor
 

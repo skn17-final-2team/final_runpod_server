@@ -21,11 +21,28 @@ os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
 base_model_name = "Qwen/Qwen2.5-1.5B-Instruct"
 ft_model_name = "CHOROROK/Qwen2.5_1.5B_trained_model_v3"
 
+
 # ===== 이스케이트 =====
 def escape_curly(text: str) -> str:
     return text.replace("{", "{{").replace("}", "}}")
 
-
+# ===== 전문 전처리 (JSON -> 텍스트) =====
+def preprocess_transcript(transcript: str) -> str:
+    """JSON 형식 전문을 텍스트로 변환"""
+    try:
+        import json
+        data = json.loads(transcript)
+        
+        lines = []
+        for entry in data:
+            for speaker, text in entry.items():
+                lines.append(f"{speaker}: {text}")
+        
+        return "\n\n".join(lines)
+    except:
+        # JSON 아니면 그대로 반환
+        return transcript
+        
 # ===== 벡터DB 로드 =====
 def load_faiss_db(db_path: str):
     embedding_model = HuggingFaceEmbeddings(model_name="dragonkue/snowflake-arctic-embed-l-v2.0-ko")
@@ -129,11 +146,3 @@ def load_model_q(model_name: str | None = base_model_name , adapter_name: str | 
     llm = HFTextGenLLM(pipe = text_gen_pipe)
     return llm
 
-
-# ===== 도메인 필터 =====
-def make_filter(filter: dict):
-    if any(filter.values()):
-        main_filter = filter.copy()
-    else:
-        main_filter = None
-    return main_filter
