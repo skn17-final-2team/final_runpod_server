@@ -1,7 +1,6 @@
 from sllm_model import build_agent, process_transcript_with_chunks
 from main_model import load_model_q
 from main_model import load_faiss_db
-from main_model import escape_curly
 from pathlib import Path
 import json
 
@@ -14,10 +13,6 @@ if __name__ == "__main__":
 
     # 모델 연결 (1.5b 파튜 기본값 설정됨)
     model = load_model_q()
-
-    # 에이전트 빌드 
-    # agent = build_agent(model=model, vector_store=vector_store, domain=domain_filter)
-    
 
     # 테스트용 루프 (django 연결 시, 필요 x / 현재 exit 입력 전까지 계속 반복 중(1회로 변경 필요))
     while True:
@@ -40,10 +35,6 @@ if __name__ == "__main__":
         print("\n" + "="*60)
         print("최종 결과")
         print("="*60 + "\n")
-
-        # if result["chunk_results"]:
-        #     print(f"✅ {len(result['chunk_results'])}개 청크 처리 완료\n")
-
         print("📝 안건/요약:")
         print("-" * 60)
         if isinstance(result["full_summary"], dict) and "error" in result["full_summary"]:

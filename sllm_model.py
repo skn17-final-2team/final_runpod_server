@@ -1,16 +1,18 @@
 import os
 import json
-import platform
+# import platform
 from pathlib import Path
-from dataclasses import dataclass
+# from dataclasses import dataclass
 from typing import List, Dict, Any, Tuple
+from pydantic import BaseModel, Field
+import traceback
 
-from langchain.tools import tool
+# from langchain.tools import tool
 from langchain.agents import create_react_agent, AgentExecutor, Tool
 from langchain.prompts import PromptTemplate
 from datetime import datetime
 
-from main_model import load_model_q, load_faiss_db, escape_curly, preprocess_transcript
+from main_model import load_model_q, load_faiss_db, preprocess_transcript
 
 # ===== 기본설정 =====
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -25,7 +27,6 @@ PROMPTS = {
     "summarizer": (PROMPT_DIR / "summarizer.txt").read_text(encoding="utf-8").strip(),
     "task_extractor": (PROMPT_DIR / "extract_tasks.txt").read_text(encoding="utf-8").strip(),
 }
-
 summarizer_prompt = PROMPTS["summarizer"]
 task_prompt = PROMPTS["task_extractor"]
 
@@ -74,55 +75,130 @@ def process_transcript_with_chunks(transcript: str, domain) -> dict:
         domain_filter = None
     else:
         domain_filter = user_domain
-    
-    # 전문 문장ㄹ로 
-    transcript = preprocess_transcript(transcript)    
+
+    # 전문 문장으로 전처리
+    transcript = preprocess_transcript(transcript)
 
     # 에이전트 빌드
     agent = build_agent(model=load_model_q(), vector_store=vector_store, domain=domain_filter)
-    # max_chunk_tokens = 1500
 
+    # 긴 회의록 처리를 위한 청크 크기 설정
+    max_chunk_len = 3000
+
+    # 전문 길이 확인 후 청크 분할 여부 결정
+    if len(transcript) > max_chunk_len:
+        chunks = chunk_transcript(transcript, max_chunk_len)
+        print(f"⚠️ 전문이 깁니다! {len(chunks)}개 청크로 분할하여 처리합니다.\n")
+
+        chunk_results = []
+        for i, chunk in enumerate(chunks, 1):
+            print(f"\n[청크 {i}/{len(chunks)}] 처리 중... (길이: {len(chunk)} 글자)")
+            try:
+                # 각 청크별로 전문 용어 검색 (선택적)
+                result = agent.invoke({"input": f"다음은 회의록의 일부입니다. 이해하기 어려운 전문 용어가 있으면 최대 5개까지만 검색해주세요:\n\n{chunk}"})
+                chunk_results.append({"chunk_index": i, "chunk_length": len(chunk), "result": result.get("output", "")})
+                print(f"[청크 {i}] 처리 완료")
+            except Exception as e:
+                print(f"[청크 {i}] 처리 실패: {e}")
+                chunk_results.append({
+                    "chunk_index": i,
+                    "chunk_length": len(chunk),
+                    "error": str(e)
+                })
+
+        # 청크가 너무 많으면 전체 전문을 요약본으로 축약
+        if len(chunks) > 5:
+            print(f"\n⚠️ 청크가 {len(chunks)}개로 너무 많습니다. 전체 요약/태스크 추출 시 청크별 요약을 사용합니다.")
+            # 청크별 결과를 합쳐서 축약된 전문 생성
+            condensed_transcript = "\n\n".join([
+                f"[청크 {cr['chunk_index']}] {cr.get('result', '')[:500]}..."
+                for cr in chunk_results if 'result' in cr
+            ])
+            use_full_transcript = False
+        else:
+            condensed_transcript = transcript
+            use_full_transcript = True
+    else:
+        # 전문 길이 적절 시 - 풀로 진행
+        print("✅ 전문 길이가 적절합니다. 청크 분할 없이 진행합니다.\n")
+        chunk_results = []
+        condensed_transcript = transcript
+        use_full_transcript = True
+
+    # 전체 전문 기반으로 세부 안건, 안건별 요약 추출
     print(f"\n{'='*60}")
-    print(f"전문 길이: {len(transcript)} 글자")
+    print("전체 전문 기반 안건/요약 추출 중...")
     print(f"{'='*60}\n")
 
-    # # 전문 길 경우 - 청크 
-    # if len(transcript) > max_chunk_tokens:
-    #     chunks = chunk_transcript(transcript, max_chunk_tokens)
-    #     print(f"전문을 {len(chunks)}개 청크로 분할했습니다.\n")
-
-    #     chunk_results = []
-    #     for i, chunk in enumerate(chunks, 1):
-    #         print(f"\n[청크 {i}/{len(chunks)}] 처리 중... (길이: {len(chunk)} 글자)")
-    #         try:
-    #             # 각 청크 agent 처리 (용어 검색)
-    #             result = agent.invoke({"input": f"다음은 회의록의 일부입니다. 이해하기 어려운 전문 용어가 있으면 검색해주세요:\n\n{chunk}"})
-    #             chunk_results.append({"chunk_index": i, "chunk_length": len(chunk), "result": result.get("output", "")})
-    #             print(f"[청크 {i}] 처리 완료")
-    #         except Exception as e:
-    #             print(f"[청크 {i}] 처리 실패: {e}")
-    #             chunk_results.append({
-    #                 "chunk_index": i,
-    #                 "chunk_length": len(chunk),
-    #                 "error": str(e)
-    #             })
-    # else:
-    #   # 전문 길이 적절 시 - 풀로 진행
-    #   print("전문 길이가 적절합니다. 청크 분할 없이 진행합니다.\n")
-    #   chunk_results = []
-
-    # # 전체 전문 기반으로 세부 안건, 안건별 요약 추출
-    # print(f"\n{'='*60}")
-    # print("전체 전문 기반 안건/요약 추출 중...")
-    # print(f"{'='*60}\n")
-
+# ===== 안건/요약 추출 =====
     try:
-        filled_summary_prompt = f"""다음 회의 전문을 분석하세요.
-                                    모르는 전문 용어가 있으면 retrieval 툴로 검색하세요.
-                                    {summarizer_prompt.format(transcript=transcript)}"""
+        transcript_for_analysis = condensed_transcript if not use_full_transcript else transcript
+        filled_summary_prompt = f"""
+            다음 회의 전문을 분석하세요.
+            {summarizer_prompt.format(transcript=transcript_for_analysis)}
+            
+            CRITICAL INSTRUCTIONS:
+            1. ONLY use information EXPLICITLY mentioned in the transcript above
+            2. DO NOT invent or hallucinate any information
+            3. If you need to look up unknown terms, use the retrieval tool with at most 5 SHORT terms
+            4. Your final answer MUST start with "Final Answer:" followed by the JSON
+            5. DO NOT include any explanations before or after the JSON"""
 
         summary_result = agent.invoke({"input": filled_summary_prompt})
         full_summary = summary_result.get("output", "")
+
+        if "Agent stopped" in full_summary or "iteration limit" in full_summary:   # Agent가 iteration limit에 도달한 경우 intermediate_steps에서 결과 추출
+            print("⚠️ Agent iteration limit 도달, 중간 결과 추출 시도...")
+            intermediate_steps = summary_result.get("intermediate_steps", [])
+            
+            # # if intermediate_steps:
+            # #     # 마지막 agent 출력에서 JSON 추출
+
+            # # 모든 step 출력 확인 (디버깅)
+            # print(f"   총 {len(intermediate_steps)}개의 intermediate steps 발견")
+
+            # 모든 LLM 출력에서 JSON 찾기
+            for i, step in enumerate(intermediate_steps):
+                if len(step) >= 1:
+                    # step은 (AgentAction, observation) 튜플
+                    agent_action = step[0] if len(step) > 0 else None
+
+                    # AgentAction의 log에서 JSON 추출
+                    if hasattr(agent_action, 'log'):
+                        log_text = str(agent_action.log)
+                        if '{' in log_text and '"agendas"' in log_text:
+                            # JSON 부분만 추출
+                            start_idx = log_text.find('{')
+                            end_idx = log_text.rfind('}') + 1
+                            if start_idx != -1 and end_idx > start_idx:
+                                json_candidate = log_text[start_idx:end_idx]
+                                # 유효성 검증
+                                try:
+                                    import json as json_module
+                                    parsed = json_module.loads(json_candidate)
+                                    if 'agendas' in parsed:
+                                        full_summary = json_candidate
+                                        print(f"✅ Step {i}에서 유효한 JSON 추출 성공!")
+                                        break
+                                except:
+                                    continue
+
+            # 위 방법이 실패하면 마지막 출력에서 추출
+            if "Agent stopped" in full_summary:
+                for step in reversed(intermediate_steps):
+                    if len(step) > 0 and hasattr(step[0], 'log'):
+                        log_text = str(step[0].log)
+                        if '{' in log_text and '}' in log_text:
+                            full_summary = log_text.strip()
+                            print(f"✅ 폴백: 마지막 step에서 텍스트 추출")
+                # for step in reversed(intermediate_steps):
+                    # if len(step) > 1 and hasattr(step[1], '__str__'):
+                    #     potential_output = str(step[1])
+                    #     if '{' in potential_output and '}' in potential_output:
+                    #         full_summary = potential_output
+                    #         print(f"✅ 중간 결과 추출 성공 (길이: {len(full_summary)}자)")
+                    #         break
+
         print("✅ 안건/요약 추출 완료\n")
     except Exception as e:
         print(f"❌ 안건/요약 추출 실패: {e}\n")
@@ -132,12 +208,40 @@ def process_transcript_with_chunks(transcript: str, domain) -> dict:
     print("전체 전문 기반 태스크 추출 중...")
     print(f"{'='*60}\n")
 
+# ===== 태스크 추출 =====   
     try:
-        filled_task_prompt = f"""다음 회의 전문을 분석하세요.
-                                모르는 전문 용어가 있으면 retrieval 툴로 검색하세요.
-                                {task_prompt.format(transcript=transcript, current_date=datetime.now())}"""
+        transcript_for_analysis = condensed_transcript if not use_full_transcript else transcript
+
+        filled_task_prompt = f"""
+            다음 회의 전문을 분석하세요.
+    
+            {task_prompt.format(transcript=transcript_for_analysis, current_date=datetime.now().date().isoformat())}
+            
+            CRITICAL INSTRUCTIONS:
+            1. ONLY extract tasks and assignees that are EXPLICITLY mentioned in the transcript
+            2. DO NOT invent names like "김영희" - ONLY use names that appear in the transcript
+            3. If an assignee is not clearly stated, use null
+            4. If you need to look up unknown terms, use the retrieval tool with at most 5 SHORT terms
+            5. Your final answer MUST start with "Final Answer:" followed by the JSON
+            6. DO NOT include any explanations before or after the JSON"""
+
         task_result = agent.invoke({"input": filled_task_prompt})
         full_tasks = task_result.get("output", "")
+
+        # Agent가 iteration limit에 도달한 경우 intermediate_steps에서 결과 추출
+        if "Agent stopped" in full_tasks or "iteration limit" in full_tasks:
+            print("⚠️ Agent iteration limit 도달, 중간 결과 추출 시도...")
+            intermediate_steps = task_result.get("intermediate_steps", [])
+            if intermediate_steps:
+                # 마지막 agent 출력에서 JSON 추출
+                for step in reversed(intermediate_steps):
+                    if len(step) > 1 and hasattr(step[1], '__str__'):
+                        potential_output = str(step[1])
+                        if '{' in potential_output and '}' in potential_output:
+                            full_tasks = potential_output
+                            print(f"✅ 중간 결과 추출 성공 (길이: {len(full_tasks)}자)")
+                            break
+
         print("✅ 태스크 추출 완료\n")
     except Exception as e:
         print(f"❌ 태스크 추출 실패: {e}\n")
@@ -157,38 +261,27 @@ def build_agent(model, vector_store, domain) :
     retriever = vector_store.as_retriever(search_kwargs=search_kwargs)
 
     template = '''
-        You are an AI meeting-analysis agent specialized in {domain} projects.
+    AI meeting analyzer for {domain}.
 
-        You must answer as accurately as possible using the available tools.
-        You have access to the following tools:
-        {tools}
+    Tools: {tools}  
 
-        Main duties:
-        1. Accurately understand and carry out the given request.
-        2. When there are unknown technical or domain-specific terms in the full meeting transcript, use the `retrieval` tool to look them up.
-           - In a single call, you MUST search at most 5 terms.
-           - Expected input format: ["term1", "term2", "term3"]
-        3. Use only information that is explicitly stated in the meeting transcript; do NOT make up or infer information that is not mentioned.
-        4. The final answer you provide MUST be written in Korean.
+    FORMAT (MANDATORY):
+    Thought: [reasoning]
+    Action: [{tool_names}] or "None"
+    Action Input: [input] or "N/A"
+    Observation: [result]
+    ...(repeat if needed)
+    Thought: I now know the final answer
+    Final Answer: [Korean JSON] 
 
-        Use the following ReAct-style format:
+    RULES:
+    1. ALWAYS end with "Final Answer:" - NO exceptions
+    2. Use retrieval ONLY for unknown terms (max 5, under 50 chars each): ["term1","term2"]
+    3. Use ONLY explicit transcript info - NO hallucinations
+    4. Keep it concise  
 
-        Thought: you should always think about what to do next
-        Action: the action to take, should be one of [{tool_names}]
-        Action Input: the input to the action
-        Observation: the result of the action
-        ... (this Thought/Action/Action Input/Observation can repeat up to 3 times)
-        Thought: I now know the final answer
-        Final Answer: the final answer to the original input question in Korean
-        (When you need JSON outputs, internally follow the Summary JSON Prompt
-         or Tasks JSON Prompt described above.)
-
-        Begin!
-
-        transcript:{input}
-        Thought:{agent_scratchpad}
-        domain:{domain}
-        '''
+    Input: {input}
+    Thought:{agent_scratchpad}'''
 
     prompt = PromptTemplate.from_template(template).partial(domain=domain)
 
@@ -206,6 +299,9 @@ def build_agent(model, vector_store, domain) :
         print('입력 타입:', type(term_list))
         print("현재 domain 필터 = ", domain)
         print('='*60)
+
+        # 최대 검색어 길이 제한 (임베딩 모델의 토큰 제한 고려)
+        MAX_TERM_LENGTH = 100  # 한 용어당 최대 100자
 
         # 입력 정규화
         try:
@@ -236,7 +332,18 @@ def build_agent(model, vector_store, domain) :
 
             print('파싱된 term_list_local:', term_list_local)
             term_list_local = [str(term).strip().strip('"\'') for term in term_list_local if term]
-            term_list_local = [t for t in term_list_local if t]
+
+            # 너무 긴 검색어 필터링 및 경고
+            filtered_terms = []
+            for t in term_list_local:
+                if t:
+                    if len(t) > MAX_TERM_LENGTH:
+                        print(f'⚠️ 검색어가 너무 깁니다 (길이: {len(t)}). 앞 {MAX_TERM_LENGTH}자만 사용: "{t[:MAX_TERM_LENGTH]}..."')
+                        filtered_terms.append(t[:MAX_TERM_LENGTH])
+                    else:
+                        filtered_terms.append(t)
+
+            term_list_local = filtered_terms
             print('최종 정리된 term_list_local:', term_list_local)
 
         except Exception as parse_error:
@@ -278,14 +385,25 @@ def build_agent(model, vector_store, domain) :
                     all_docs_list.append([])
                     continue
 
+                # 추가 안전장치: 검색어가 너무 긴 경우 다시 한번 확인
+                if len(term_str) > MAX_TERM_LENGTH:
+                    print(f'⚠️ 검색어 재확인: 길이 {len(term_str)} > {MAX_TERM_LENGTH}, 잘라냄')
+                    term_str = term_str[:MAX_TERM_LENGTH]
+
                 # FAISS 검색 실행
-                docs = vector_store.similarity_search(
-                    term_str,  # 키워드 인자 대신 위치 인자 사용
-                    k=k,
-                    filter=filter_dict
-                )
-                all_docs_list.append(docs)
-                print(f'  ✅ 검색 완료: {len(docs)}개 문서 발견')
+                try:
+                    docs = vector_store.similarity_search(
+                        term_str,  # 키워드 인자 대신 위치 인자 사용
+                        k=k,
+                        filter=filter_dict
+                    )
+                    all_docs_list.append(docs)
+                    print(f'  ✅ 검색 완료: {len(docs)}개 문서 발견')
+                except Exception as search_error:
+                    print(f'  ❌ FAISS 검색 중 오류: {type(search_error).__name__}: {search_error}')
+                    print(f'     검색어: "{term_str[:50]}..." (길이: {len(term_str)})')
+                    all_docs_list.append([])
+                    continue
             
             except Exception as e:
                 print(f'  ❌ 검색 실패!')
@@ -293,7 +411,6 @@ def build_agent(model, vector_store, domain) :
                 print(f'     오류 메시지: {e}')
                 print(f'     문제된 term: {repr(term)}')
                 
-                import traceback
                 traceback.print_exc()
                 all_docs_list.append([])
 
@@ -316,8 +433,6 @@ def build_agent(model, vector_store, domain) :
         return retrieval_result
 
     # Tool 객체 직접 생성
-    from pydantic import BaseModel, Field
-
     class RetrievalInput(BaseModel):
         term_list: str = Field(description="검색할 용어들 (단일 문자열 또는 JSON 배열 문자열)")
 
@@ -331,7 +446,7 @@ def build_agent(model, vector_store, domain) :
     tools = [retrieval_tool]
 
     agent = create_react_agent(model, tools, prompt)
-    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True, max_iterations=5, max_execution_time=1000, handle_parsing_errors=True)
+    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True, max_iterations=20, max_execution_time=3000, handle_parsing_errors=True)
 
     return agent_executor
 
