@@ -18,8 +18,8 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
 
 # ===== 모델 설정 =====
-base_model_name = "Qwen/Qwen2.5-1.5B-Instruct"
-ft_model_name = "CHOROROK/Qwen2.5_1.5B_meeting_agenda_task"
+base_model_name = "Qwen/Qwen3-8B"
+ft_model_name = ""
 
 # # ===== 이스케이트 =====
 # def escape_curly(text: str) -> str:

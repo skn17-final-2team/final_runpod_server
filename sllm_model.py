@@ -211,11 +211,15 @@ def process_transcript_with_chunks(transcript: str, domain) -> dict:
 # ===== 태스크 추출 =====   
     try:
         transcript_for_analysis = condensed_transcript if not use_full_transcript else transcript
-
+        current_date=datetime.now().date().isoformat()
+        date_obj = datetime.strptime(current_date, "%Y-%m-%d")
+        weekdays = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
+        current_weekday=weekdays[date_obj.weekday()]
+        
         filled_task_prompt = f"""
             다음 회의 전문을 분석하세요.
     
-            {task_prompt.format(transcript=transcript_for_analysis, current_date=datetime.now().date().isoformat())}
+            {task_prompt.format(transcript=transcript_for_analysis, current_date=datetime.now().date().isoformat(), current_weekday=current_weekday)}
             
             CRITICAL INSTRUCTIONS:
             1. ONLY extract tasks and assignees that are EXPLICITLY mentioned in the transcript
