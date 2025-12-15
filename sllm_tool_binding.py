@@ -54,13 +54,13 @@ class QwenLLMAgent:
         adapter_id: Optional[str] = FT_MODEL_NAME,
         device_map: str = "auto",
         torch_dtype: str = "auto",
-        system_prompt: str = SYSTEM_PROMPT,
-        enable_thinking: bool = True
+        system_prompt: str = SYSTEM_PROMPT
     ):
 
         # Tokenizer 로드
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_id,
+            use_fast=False, 
             cache_dir=CACHE_DIR
         )
 
@@ -79,10 +79,8 @@ class QwenLLMAgent:
         else:
             self.model = base_model
 
-        # self.max_history = max_history
         self.messages: List[Message] = []
         self.system_prompt = system_prompt
-        self.enable_thinking = enable_thinking
         self.tools: Dict[str, Tool] = {}
 
         print("✅ 모델 로드 완료!\n")
@@ -136,14 +134,30 @@ class QwenLLMAgent:
 
         return tools_text
 
+    def _clean_text(self, text: str) -> str:
+        """서로게이트 문자 및 문제가 되는 유니코드 문자를 제거합니다."""
+        if not isinstance(text, str):
+            text = str(text)
+
+        # 서로게이트 문자 제거
+        try:
+            # UTF-8로 인코딩 가능한지 확인하고, 불가능한 문자 제거
+            text = text.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
+        except Exception:
+            # 폴백: 안전한 문자만 유지
+            text = ''.join(char for char in text if ord(char) < 0x10000)
+
+        return text
+
     def _format_messages(self) -> List[Dict[str, str]]:
         """메시지를 Qwen 모델 형식으로 변환합니다."""
         formatted = []
 
         # 툴 설명과 함께 시스템 프롬프트 추가
-        system_content = self.system_prompt
+        system_content = self._clean_text(self.system_prompt)
+
         if self.tools:
-            system_content += "\n" + self._build_tool_descriptions()
+            system_content += "\n" + self._clean_text(self._build_tool_descriptions())
 
         formatted.append({
             "role": "system",
@@ -154,7 +168,7 @@ class QwenLLMAgent:
         for msg in self.messages:
             formatted.append({
                 "role": msg.role,
-                "content": msg.content
+                "content": self._clean_text(msg.content)
             })
 
         return formatted
@@ -199,11 +213,13 @@ class QwenLLMAgent:
         max_new_tokens: int = 2048,
         temperature: float = 0.7,
         top_p: float = 0.9,
-        enable_thinking: Optional[bool] = None,
-        return_thinking: bool = False,
         use_tools: bool = True
     ) -> str:
         """사용자 입력을 받아 응답을 생성합니다."""
+        
+        if user_input is not None and not isinstance(user_input, str):
+            user_input = json.dumps(user_input, ensure_ascii=False)
+            print(type(user_input))
 
         # 빈 입력이 아닐 때만 메시지 추가 (툴 호출 후 재귀에서는 빈 문자열)
         if user_input:
@@ -211,30 +227,21 @@ class QwenLLMAgent:
 
         formatted_messages = self._format_messages()
 
-        if enable_thinking is None:
-            enable_thinking = self.enable_thinking
+        # 템플릿 삽입 및 토큰화
+        model_inputs = self.tokenizer.apply_chat_template(
+            formatted_messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_tensors="pt"
+        )
+        
+        # apply_chat_template가 tensor만 주는 버전 대비
+        if isinstance(model_inputs, torch.Tensor):
+            model_inputs = {"input_ids": model_inputs}
 
-        # 템플릿 삽입
-        try:
-            text = self.tokenizer.apply_chat_template(
-                formatted_messages,
-                tokenize=False,
-                add_generation_prompt=True,
-                enable_thinking=enable_thinking
-            )
-        except TypeError:
-            # enable_thinking 미지원 시 폴백
-            text = self.tokenizer.apply_chat_template(
-                formatted_messages,
-                tokenize=False,
-                add_generation_prompt=True
-            )
+        model_inputs = {k: v.to(self.model.device) for k, v in model_inputs.items()}
+        print(type(model_inputs))
 
-        # 문자열 타입 확인 및 변환
-        if not isinstance(text, str):
-            text = str(text)
-
-        model_inputs = self.tokenizer([text], return_tensors="pt").to(self.model.device)
 
         # 응답 생성
         with torch.no_grad():
@@ -247,30 +254,13 @@ class QwenLLMAgent:
             )
 
         # 생성된 응답 추출
-        output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist()
+        output_ids = generated_ids[0][len(model_inputs["input_ids"][0]):].tolist()
 
-        thinking_content = ""
-        if enable_thinking: # 응답 반환하기 전에 내부적으로 생각하게 만들기
-            try:
-                # Find </think> token (151668)
-                index = len(output_ids) - output_ids[::-1].index(151668)
-            except ValueError:
-                index = 0
-
-            thinking_content = self.tokenizer.decode(
-                output_ids[:index],
-                skip_special_tokens=True
-            ).strip("\n")
-
-            content = self.tokenizer.decode(
-                output_ids[index:],
-                skip_special_tokens=True
-            ).strip("\n")
-        else:
-            content = self.tokenizer.decode(
-                output_ids,
-                skip_special_tokens=True
-            ).strip("\n")
+        # 응답 디코딩
+        content = self.tokenizer.decode(
+            output_ids,
+            skip_special_tokens=True
+        ).strip("\n")
 
         # 툴 호출 (use_tools=True일 때만)
         tool_call = self._parse_tool_call(content) if use_tools else None
@@ -304,19 +294,11 @@ class QwenLLMAgent:
                 max_new_tokens=max_new_tokens,
                 temperature=temperature,
                 top_p=top_p,
-                enable_thinking=enable_thinking,
-                return_thinking=return_thinking,
                 use_tools=use_tools
             )
 
         # 히스토리에 응답 저장
         self.messages.append(Message(role="assistant", content=content))
-
-        if return_thinking and enable_thinking:
-            return {
-                "thinking": thinking_content,
-                "content": content
-            }
 
         return content
 
@@ -493,9 +475,7 @@ def agent_main(domain_input, transcript):
 
     agent = QwenLLMAgent(
         model_id=BASE_MODEL_NAME,
-        adapter_id=FT_MODEL_NAME,
-        # max_history=20,
-        enable_thinking=True
+        adapter_id=FT_MODEL_NAME
     )
 
     # 도메인 입력

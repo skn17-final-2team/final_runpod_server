@@ -26,16 +26,28 @@ ft_model_name = ""
 #     return text.replace("{", "{{").replace("}", "}}")
 
 # ===== 전문 전처리 (JSON -> 텍스트) =====
-def preprocess_transcript(transcript: str) -> str:
-    try:
-        data = json.loads(transcript)  # JSON 형식 파싱
-        lines = []
-        for entry in data:
+def preprocess_transcript(transcript):
+    # 1) 이미 파이썬 객체(list/dict)로 들어온 경우
+    if isinstance(transcript, list):
+        data = transcript
+    elif isinstance(transcript, dict):
+        data = [transcript]
+    else:
+        # 2) 문자열이면 JSON 파싱 시도
+        try:
+            data = json.loads(transcript)
+        except Exception:
+            return str(transcript)
+
+    lines = []
+    for entry in data:
+        if isinstance(entry, dict):
             for speaker, text in entry.items():
                 lines.append(f"{speaker}: {text}")
-        return "\n\n".join(lines)
-    except:
-        return transcript
+        else:
+            lines.append(str(entry))
+
+    return "\n\n".join(lines)
         
 # ===== 벡터DB 로드 =====
 def load_faiss_db(db_path: str):
