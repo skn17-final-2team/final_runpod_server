@@ -47,7 +47,8 @@ async def inference(req: InferenceRequest):
     if not req.transcript:
         raise HTTPException(status_code=422, detail="transcript required")
     try:
-        result = process_transcript_with_chunks(req.transcript, req.domain)
+        # result = process_transcript_with_chunks(req.transcript, req.domain)
+        result = agent_main(req.transcript, req.domain)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})
