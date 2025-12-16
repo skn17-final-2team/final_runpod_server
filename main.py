@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 from whisper_pannote import run_stt_diarization
 from sllm_model import process_transcript_with_chunks
-
+from sllm_tool_binding import agent_main
 
 app = FastAPI(title="Runpod STT + Pyannote Server")
 
