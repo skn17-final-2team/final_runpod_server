@@ -518,7 +518,8 @@ def agent_main(domain_input, transcript):
     print("회의록 처리 파이프라인 시작")
     print("=" * 50)
     result = process_meeting_transcript(
-        transcript=sample_transcript,
+        # transcript=sample_transcript,
+        transcript=transcript,
         agent=agent,
         current_date=None,
         use_retrieval=True,  # 전문 이해 시 retrieval tool 사용
