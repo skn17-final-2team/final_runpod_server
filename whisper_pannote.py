@@ -47,12 +47,14 @@ def clear_cuda_cache():
 def run_stt_diarization(audio_url, DEBUG=False):
     if not DEBUG:
         try:
+            print('파일 다운로드 중')
             resp = requests.get(audio_url)
             if resp.status_code != 200:
                 print("==== ERROR BODY ====")
                 print(resp.text)
                 return {"success": False, "message": f"Download failed ({resp.status_code})"}
             audio_bytes = resp.content
+            print('파일 다운로드 완료')
         except Exception as e:
             return {"success": False, "error": {"type": "DownloadError", "message": str(e)}}
 
@@ -67,6 +69,7 @@ def run_stt_diarization(audio_url, DEBUG=False):
             tmp_path = tmp.name
         start = time.perf_counter()
         # Use globally loaded models
+        print('위스퍼 + 파이아노트 병렬 실행 중')
         with concurrent.futures.ThreadPoolExecutor() as executor:
             whisper_future = executor.submit(whisper_model.transcribe, tmp_path, language="ko")
             diarization_future = executor.submit(pipeline, tmp_path)
@@ -122,7 +125,8 @@ def run_stt_diarization(audio_url, DEBUG=False):
 
         # formatted text 결과
         formatted_text = [{seg['speaker']: seg['text']} for seg in merged_segments]
-
+        print('==================== 결과 ====================')
+        print(formatted_text)
         return {
             "success": True,
             "data": {
