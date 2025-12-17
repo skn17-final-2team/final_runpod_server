@@ -14,10 +14,10 @@ from main_model import preprocess_transcript
 
 # ===== Configuration =====
 CACHE_DIR = "/workspace/hf_cache"
-# BASE_MODEL_NAME = "Qwen/Qwen3-8B"
-BASE_MODEL_NAME = "Qwen/Qwen2.5-1.5B-instruct"
+BASE_MODEL_NAME = "Qwen/Qwen3-8B"
+# BASE_MODEL_NAME = "Qwen/Qwen2.5-1.5B-instruct"
 # FT_MODEL_NAME = ""
-FT_MODEL_NAME = "CHOROROK/Qwen2.5_1.5B_meeting_agenda_task"
+FT_MODEL_NAME = "CHOROROK/Qwen3_8B_meeting_agenda_task"
 DB_PATH = "./faiss_db_merged"
 
 PROMPT_DIR = Path(__file__).parent / "prompts"
