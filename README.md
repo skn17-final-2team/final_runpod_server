@@ -13,11 +13,12 @@
 - Django 서버 레포지토리: https://github.com/skn17-final-2team/final_django
 - Django + 모델 서버 및 산출물 레포지토리: https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN17-FINAL-2Team
 
-<!-- tobo
 ## 핵심 기능
 | 구분 | 기능 | 설명 |
 |:--|:--|:--|
- -->
+| 음성 처리 | STT + 화자 분리 | 음성을 텍스트로 변환하고 발화자 구분 |
+| 도메인 분석 | 도메인 용어 기반 컨텍스트 강화 | 사내/업무 용어를 인식하고 의미 보강(RAG) |
+| 추출 | 안건/요약/태스크 자동 추출 | `누가/무엇을/언제까지`를 포함한 구조화 출력 |
 
 ## 기술 스택
 | 분야 | 기술 |
